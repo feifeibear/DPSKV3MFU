@@ -103,7 +103,7 @@ bsz = 32
 
 # pre-training context length 4K
 seq_len = 1024 * 4
-H100_peak_bf16_flops = 1979
+H100_peak_bf16_flops = 989.5
 
 fwd_flops = cal_fwd_flops(bsz, seq_len)
 bwd_flops = fwd_flops * 2
