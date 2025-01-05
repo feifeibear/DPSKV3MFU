@@ -78,7 +78,7 @@ def cal_moe_fwd_flops(bs: int, seq_len: int):
     flops = 0
 
     flops += 2 * bs * seq_len * args.dim * args.moe_inter_dim * 3
-    flops += 2 * bs * seq_len * args.moe_inter_dim
+    flops += bs * seq_len * args.moe_inter_dim
 
     return flops
 
