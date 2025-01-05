@@ -39,7 +39,6 @@ def cal_attn_fwd_flops(bs: int, seq_len: int):
     # score x V
     # x = torch.einsum("bsht,bthd->bshd", scores, self.v_cache[:bsz, :end_pos]) -> [bs, seq_len, args.n_heads, args.v_head_dim]
     flops += 2 * bs * seq_len * seq_len * args.n_heads * args.v_head_dim
-    flops += 2 * bs * seq_len * seq_len * args.n_heads * args.v_head_dim
 
     return flops / 2
 
