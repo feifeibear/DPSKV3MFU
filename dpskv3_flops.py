@@ -25,6 +25,9 @@ class Args:
 
 args = Args()
 
+# we assume the T, B, M in the paper are in the unit of 1000
+BASE = 1000
+
 def cal_embed_fwd_flops(bs: int, seq_len: int):
     return 2 * bs * seq_len * args.dim
 
@@ -92,13 +95,13 @@ def cal_fwd_flops(bs: int, seq_len: int):
     shard_expert_num = 1
     routed_expert_num = 8
 
-    flops_mla = cal_mla_fwd_flops(bs, seq_len) / seq_len / bs / (1024*1024*1024) * args.n_layers
-    flops_moe = (shard_expert_num + routed_expert_num) * cal_moe_fwd_flops(bs, seq_len) / seq_len / bs / (1024*1024*1024) * (args.n_layers - args.n_dense_layers)
-    flops_mlp = cal_mlp_fwd_flops(bs, seq_len) / seq_len / bs / (1024*1024*1024) * args.n_dense_layers
+    flops_mla = cal_mla_fwd_flops(bs, seq_len) / seq_len / bs / (BASE**3) * args.n_layers
+    flops_moe = (shard_expert_num + routed_expert_num) * cal_moe_fwd_flops(bs, seq_len) / seq_len / bs / (BASE**3) * (args.n_layers - args.n_dense_layers)
+    flops_mlp = cal_mlp_fwd_flops(bs, seq_len) / seq_len / bs / (BASE**3) * args.n_dense_layers
 
 
-    flops_embed = cal_embed_fwd_flops(bs, seq_len) / seq_len / bs / (1024*1024*1024)
-    flops_head = cal_head_fwd_flops(bs, seq_len) / seq_len / bs / (1024*1024*1024)
+    flops_embed = cal_embed_fwd_flops(bs, seq_len) / seq_len / bs / (BASE**3)
+    flops_head = cal_head_fwd_flops(bs, seq_len) / seq_len / bs / (BASE**3)
 
     print(f"flops_mla: {flops_mla} TFLOPS, flops_moe: {flops_moe} TFLOPS")
 
@@ -112,18 +115,20 @@ bsz = 32
 
 # pre-training context length 4K
 seq_len = 1024 * 4
-H100_peak_bf16_flops = 989.5
-gpu_hours = 2.664
+
+H100_peak_bf16_flops = 989.5 * 1e12 / BASE**4
+gpu_hours = 2.664 * 3600 / BASE
 
 fwd_flops = cal_fwd_flops(bsz, seq_len)
 bwd_flops = fwd_flops * 2
 
-MFU = (fwd_flops + bwd_flops) * 14.8 / (gpu_hours * 3600 / 1024 * H100_peak_bf16_flops)
+MFU = (fwd_flops + bwd_flops) * 14.8 / (gpu_hours  * H100_peak_bf16_flops)
 
+print(f"we assume the T, B, M in the paper are in the unit of {BASE}")
 print(f"MFU: {MFU}")
 
 # estimate MFU from parameter numbers
-attn_flosp = 3 * cal_attn_fwd_flops(bsz, seq_len) * args.n_layers / (1024**3) / (bsz * seq_len)
-MFU_ref = (37*6 + attn_flosp) * 14.8 / (gpu_hours * 3600 / 1024 * H100_peak_bf16_flops)
+attn_flosp = 3 * cal_attn_fwd_flops(bsz, seq_len) * args.n_layers / (BASE**3) / (bsz * seq_len)
+MFU_ref = (37*6 + attn_flosp) * 14.8 / (gpu_hours * H100_peak_bf16_flops)
 print(f"ref MFU: {MFU_ref}")
 
