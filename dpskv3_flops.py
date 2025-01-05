@@ -31,6 +31,17 @@ def cal_embed_fwd_flops(bs: int, seq_len: int):
 def cal_head_fwd_flops(bs: int, seq_len: int):
     return 2 * bs * seq_len * args.dim * args.vocab_size
 
+def cal_attn_fwd_flops(bs: int, seq_len: int):
+    # score = Q x K^T /2 double to causal
+    # scores = torch.einsum("bshd,bthd->bsht", q, self.k_cache[:bsz, :end_pos]) * self.softmax_scale -> [bs, seq_len, seq_len]
+    flops = 2 * bs * seq_len * seq_len * args.n_heads * args.qk_head_dim
+
+    # score x V
+    # x = torch.einsum("bsht,bthd->bshd", scores, self.v_cache[:bsz, :end_pos])
+    flops += 2 * bs * seq_len * seq_len * args.n_heads * args.v_head_dim
+
+    return flops / 2
+
 def cal_mla_fwd_flops(bs: int, seq_len: int):
     flops = 0
 
@@ -51,13 +62,8 @@ def cal_mla_fwd_flops(bs: int, seq_len: int):
     # kv = self.wkv_b(self.kv_norm(kv)) -> [bs, seq_len, (args.n_heads * args.qk_head_dim)]
     flops += 2 * bs * seq_len * args.kv_lora_rank * args.n_heads * (args.qk_nope_head_dim + args.v_head_dim)
 
-    # score = Q x K^T /2 double to causal
-    # scores = torch.einsum("bshd,bthd->bsht", q, self.k_cache[:bsz, :end_pos]) * self.softmax_scale -> [bs, seq_len, n_heads, (args.qk_nope_head_dim + args.qk_rope_head_dim)]
-    flops += 2 * bs * seq_len * args.n_heads * args.qk_head_dim * seq_len / 2
-
-    # score x V
-    # x = torch.einsum("bsht,bthd->bshd", scores, self.v_cache[:bsz, :end_pos])
-    flops += 2 * bs * seq_len * args.n_heads * args.qk_head_dim * args.v_head_dim
+    # attn
+    flops += cal_attn_fwd_flops(bs, seq_len)
 
     # x = self.wo(x.flatten(2))
     flops += 2 * bs * seq_len * args.n_heads * args.v_head_dim * args.dim
@@ -122,7 +128,7 @@ MFU = (fwd_flops + bwd_flops) * 14.8 / (2.788 * 3600 / 1024 * H100_peak_bf16_flo
 print(f"MFU: {MFU}")
 
 # estimate MFU from parameter numbers
-attn_flosp = 6 * (args.n_heads * args.qk_head_dim * seq_len / 2 + args.n_heads * args.qk_head_dim * args.v_head_dim) / (1024**3)
+attn_flosp = 3 * cal_attn_fwd_flops(bsz, seq_len) / (1024**3) / (bsz * seq_len)
 MFU_ref = (37*6 + attn_flosp) * 14.8 / (2.788 * 3600 / 1024 * H100_peak_bf16_flops)
 print(f"ref MFU: {MFU_ref}")
 
