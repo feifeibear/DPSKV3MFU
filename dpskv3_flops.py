@@ -102,12 +102,6 @@ def cal_fwd_flops(bs: int, seq_len: int):
 
     print(f"flops_mla: {flops_mla} TFLOPS, flops_moe: {flops_moe} TFLOPS")
 
-    # calculate MoE FLOPS from parameter numbers
-    # MOE_act_param = args.dim * args.moe_inter_dim * 3 * args.n_layers * (shard_expert_num + routed_expert_num)
-    # MOE_ref_flops = 2 * MOE_act_param / (1024*1024*1024)
-
-    # print(f"MOE_ref_flops: {MOE_ref_flops} TFLOPS, MOE_act_param: {MOE_act_param / (1024*1024*1024)} B")
-
     flops = flops_mla + flops_moe + flops_mlp + flops_embed + flops_head
     
     print(f"flops: {flops} TFLOPS")
@@ -119,16 +113,17 @@ bsz = 32
 # pre-training context length 4K
 seq_len = 1024 * 4
 H100_peak_bf16_flops = 989.5
+gpu_hours = 2.664
 
 fwd_flops = cal_fwd_flops(bsz, seq_len)
 bwd_flops = fwd_flops * 2
 
-MFU = (fwd_flops + bwd_flops) * 14.8 / (2.788 * 3600 / 1024 * H100_peak_bf16_flops)
+MFU = (fwd_flops + bwd_flops) * 14.8 / (gpu_hours * 3600 / 1024 * H100_peak_bf16_flops)
 
 print(f"MFU: {MFU}")
 
 # estimate MFU from parameter numbers
 attn_flosp = 3 * cal_attn_fwd_flops(bsz, seq_len) * args.n_layers / (1024**3) / (bsz * seq_len)
-MFU_ref = (37*6 + attn_flosp) * 14.8 / (2.788 * 3600 / 1024 * H100_peak_bf16_flops)
+MFU_ref = (37*6 + attn_flosp) * 14.8 / (gpu_hours * 3600 / 1024 * H100_peak_bf16_flops)
 print(f"ref MFU: {MFU_ref}")
 
