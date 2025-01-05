@@ -128,7 +128,7 @@ MFU = (fwd_flops + bwd_flops) * 14.8 / (2.788 * 3600 / 1024 * H100_peak_bf16_flo
 print(f"MFU: {MFU}")
 
 # estimate MFU from parameter numbers
-attn_flosp = 3 * cal_attn_fwd_flops(bsz, seq_len) / (1024**3) / (bsz * seq_len)
+attn_flosp = 3 * cal_attn_fwd_flops(bsz, seq_len) * args.n_layers / (1024**3) / (bsz * seq_len)
 MFU_ref = (37*6 + attn_flosp) * 14.8 / (2.788 * 3600 / 1024 * H100_peak_bf16_flops)
 print(f"ref MFU: {MFU_ref}")
 
