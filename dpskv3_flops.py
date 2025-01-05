@@ -25,6 +25,12 @@ class Args:
 
 args = Args()
 
+def cal_embed_fwd_flops(bs: int, seq_len: int):
+    return 2 * bs * seq_len * args.dim
+
+def cal_head_fwd_flops(bs: int, seq_len: int):
+    return 2 * bs * seq_len * args.dim * args.vocab_size
+
 def cal_mla_fwd_flops(bs: int, seq_len: int):
     flops = 0
 
@@ -45,9 +51,9 @@ def cal_mla_fwd_flops(bs: int, seq_len: int):
     # kv = self.wkv_b(self.kv_norm(kv)) -> [bs, seq_len, (args.n_heads * args.qk_head_dim)]
     flops += 2 * bs * seq_len * args.kv_lora_rank * args.n_heads * (args.qk_nope_head_dim + args.v_head_dim)
 
-    # score = Q x K^T
+    # score = Q x K^T /2 double to causal
     # scores = torch.einsum("bshd,bthd->bsht", q, self.k_cache[:bsz, :end_pos]) * self.softmax_scale -> [bs, seq_len, n_heads, (args.qk_nope_head_dim + args.qk_rope_head_dim)]
-    flops += 2 * bs * seq_len * args.n_heads * args.qk_head_dim * seq_len
+    flops += 2 * bs * seq_len * args.n_heads * args.qk_head_dim * seq_len / 2
 
     # score x V
     # x = torch.einsum("bsht,bthd->bshd", scores, self.v_cache[:bsz, :end_pos])
@@ -85,6 +91,9 @@ def cal_fwd_flops(bs: int, seq_len: int):
     flops_mlp = cal_mlp_fwd_flops(bs, seq_len) / seq_len / bs / (1024*1024*1024) * args.n_dense_layers
 
 
+    flops_embed = cal_embed_fwd_flops(bs, seq_len) / seq_len / bs / (1024*1024*1024)
+    flops_head = cal_head_fwd_flops(bs, seq_len) / seq_len / bs / (1024*1024*1024)
+
     print(f"flops_mla: {flops_mla} TFLOPS, flops_moe: {flops_moe} TFLOPS")
 
     # calculate MoE FLOPS from parameter numbers
@@ -93,7 +102,7 @@ def cal_fwd_flops(bs: int, seq_len: int):
 
     # print(f"MOE_ref_flops: {MOE_ref_flops} TFLOPS, MOE_act_param: {MOE_act_param / (1024*1024*1024)} B")
 
-    flops = flops_mla + flops_moe + flops_mlp
+    flops = flops_mla + flops_moe + flops_mlp + flops_embed + flops_head
     
     print(f"flops: {flops} TFLOPS")
     return flops
@@ -113,5 +122,7 @@ MFU = (fwd_flops + bwd_flops) * 14.8 / (2.788 * 3600 / 1024 * H100_peak_bf16_flo
 print(f"MFU: {MFU}")
 
 # estimate MFU from parameter numbers
-MFU_ref = 37*6 * 14.8 / (2.788 * 3600 / 1024 * H100_peak_bf16_flops)
+attn_flosp = 6 * (args.n_heads * args.qk_head_dim * seq_len / 2 + args.n_heads * args.qk_head_dim * args.v_head_dim) / (1024**3)
+MFU_ref = (37*6 + attn_flosp) * 14.8 / (2.788 * 3600 / 1024 * H100_peak_bf16_flops)
 print(f"ref MFU: {MFU_ref}")
+
